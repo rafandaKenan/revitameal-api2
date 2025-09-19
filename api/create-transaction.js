@@ -1,5 +1,4 @@
 import Midtrans from 'midtrans-client';
-import crypto from 'crypto';
 
 // Inisialisasi Snap dari Midtrans
 const snap = new Midtrans.Snap({
@@ -14,38 +13,37 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { amount, customerName, customerEmail } = req.body;
+    // Ambil data yang lebih detail dari body request
+    const { orderId, grossAmount, customerDetails, itemDetails } = req.body;
 
-    // Pastikan data yang dibutuhkan ada
-    if (!amount || !customerName || !customerEmail) {
-        return res.status(400).json({ error: 'Missing required fields: amount, customerName, customerEmail' });
+    // Validasi data yang masuk
+    if (!orderId || !grossAmount || !customerDetails || !itemDetails) {
+        return res.status(400).json({ error: 'Missing required fields' });
     }
-
-    // Buat ID pesanan yang unik
-    const orderId = `REVITAMEAL-${crypto.randomUUID()}`;
 
     const parameter = {
       transaction_details: {
         order_id: orderId,
-        gross_amount: parseInt(amount),
+        gross_amount: parseInt(grossAmount),
       },
-      customer_details: {
-        first_name: customerName,
-        email: customerEmail,
-      },
+      customer_details: customerDetails,
+      item_details: itemDetails,
       credit_card: {
         secure: true,
       },
     };
 
     // Buat transaksi dan dapatkan token
-    const token = await snap.createTransactionToken(parameter);
+    const snapToken = await snap.createTransactionToken(parameter);
 
-    console.log('Transaction Token:', token);
-    res.status(200).json({ token });
+    console.log('Transaction Snap Token:', snapToken);
+    res.status(200).json({ snapToken }); // Mengirim kembali 'snapToken' sesuai ekspektasi frontend
 
   } catch (error) {
-    console.error('Error creating transaction:', error.message);
-    res.status(500).json({ error: 'Failed to create transaction', details: error.message });
+    console.error('Error creating transaction:', error);
+    // Mengirim pesan error yang lebih informatif dari Midtrans jika ada
+    const errorMessage = error.ApiResponse ? error.ApiResponse.error_messages.join(', ') : error.message;
+    res.status(500).json({ error: 'Failed to create transaction', details: errorMessage });
   }
 }
+
