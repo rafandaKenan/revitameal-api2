@@ -1,70 +1,61 @@
-import admin from 'firebase-admin';
 import Midtrans from 'midtrans-client';
 
-// Inisialisasi Firebase Admin SDK jika belum diinisialisasi
-if (!admin.apps.length) {
-  // Pastikan FIREBASE_SERVICE_ACCOUNT diatur di Vercel Environment Variables
-  // Ini adalah JSON yang di-base64-encode dari serviceAccountKey.json
-  const serviceAccount = JSON.parse(
-    Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT, 'base64').toString('utf8')
-  );
-
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-  });
-}
-
-const db = admin.firestore();
+// Inisialisasi Core API dari Midtrans untuk verifikasi notifikasi
+const coreApi = new Midtrans.CoreApi({
+    isProduction: false, // Ganti ke `true` jika sudah production
+    serverKey: process.env.MIDTRANS_SERVER_KEY,
+    clientKey: process.env.MIDTRANS_CLIENT_KEY
+});
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ message: 'Method Not Allowed' });
-  }
-
-  // Inisialisasi Midtrans Notification Handler
-  const apiClient = new Midtrans.CoreApi();
-  apiClient.apiConfig.isProduction = false; // Sesuaikan dengan mode produksi
-  apiClient.apiConfig.serverKey = process.env.MIDTRANS_SERVER_KEY;
-
-  try {
-    const notification = new apiClient.Notification(req.body);
-
-    const transactionStatus = notification.transaction_status;
-    const fraudStatus = notification.fraud_status;
-    const orderId = notification.order_id;
-
-    console.log(`Received notification for Order ID: ${orderId}, Status: ${transactionStatus}`);
-
-    const orderRef = db.collection('orders').doc(orderId);
-    let newStatus;
-
-    if (transactionStatus === 'capture') {
-      if (fraudStatus === 'challenge') {
-        newStatus = 'challenge';
-      } else if (fraudStatus === 'accept') {
-        newStatus = 'paid';
-      }
-    } else if (transactionStatus === 'settlement') {
-      newStatus = 'paid';
-    } else if (transactionStatus === 'cancel' || transactionStatus === 'deny' || transactionStatus === 'expire') {
-      newStatus = 'failed';
-    } else if (transactionStatus === 'pending') {
-      newStatus = 'pending';
+    if (req.method !== 'POST') {
+        return res.status(405).json({ error: 'Method Not Allowed' });
     }
 
-    // Perbarui status pesanan di Firestore
-    if (newStatus) {
-      await orderRef.update({
-        status: newStatus,
-        paymentDetails: req.body,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-      console.log(`Order ${orderId} status updated to ${newStatus}`);
-    }
+    try {
+        const notificationJson = req.body;
 
-    res.status(200).send('OK');
-  } catch (error) {
-    console.error('Error handling notification:', error);
-    res.status(500).send('Error');
-  }
+        // Verifikasi notifikasi dari Midtrans
+        const statusResponse = await coreApi.transaction.notification(notificationJson);
+        
+        const orderId = statusResponse.order_id;
+        const transactionStatus = statusResponse.transaction_status;
+        const fraudStatus = statusResponse.fraud_status;
+
+        console.log(`Transaction notification received. Order ID: ${orderId}. Transaction status: ${transactionStatus}. Fraud status: ${fraudStatus}`);
+
+        // Lakukan logika bisnis berdasarkan status transaksi
+        if (transactionStatus == 'capture') {
+            // Untuk pembayaran dengan kartu kredit
+            if (fraudStatus == 'challenge') {
+                // TODO: challenge
+                console.log(`Order ID ${orderId} is challenged by FDS`);
+            } else if (fraudStatus == 'accept') {
+                // TODO: set transaction status on your database to 'success'
+                console.log(`Payment for Order ID ${orderId} is successful.`);
+                // TODO: Update status pesanan di database Anda menjadi 'SUCCESS'
+            }
+        } else if (transactionStatus == 'settlement') {
+            // TODO: set transaction status on your database to 'success'
+            console.log(`Payment for Order ID ${orderId} is settled (successful).`);
+            // TODO: Update status pesanan di database Anda menjadi 'SUCCESS'
+        } else if (transactionStatus == 'cancel' ||
+                   transactionStatus == 'deny' ||
+                   transactionStatus == 'expire') {
+            // TODO: set transaction status on your database to 'failure'
+            console.log(`Payment for Order ID ${orderId} failed.`);
+            // TODO: Update status pesanan di database Anda menjadi 'FAILED'
+        } else if (transactionStatus == 'pending') {
+            // TODO: set transaction status on your database to 'pending' / waiting payment
+            console.log(`Payment for Order ID ${orderId} is pending.`);
+            // TODO: Update status pesanan di database Anda menjadi 'PENDING'
+        }
+        
+        // Kirim respons 200 OK agar Midtrans tahu notifikasi sudah diterima
+        res.status(200).json({ status: 'ok' });
+
+    } catch (error) {
+        console.error('Error processing notification:', error.message);
+        res.status(500).json({ error: 'Notification processing failed', details: error.message });
+    }
 }
