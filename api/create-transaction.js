@@ -12,11 +12,33 @@ export default async function handler(req, res) {
     return res.status(405).json({ message: 'Method Not Allowed' });
   }
 
-  const { orderId, grossAmount, customerDetails, itemDetails } = req.body;
+  // Coba parse body permintaan sebagai JSON
+  let body;
+  try {
+    body = req.body;
+  } catch (error) {
+    console.error('Failed to parse request body as JSON:', error);
+    return res.status(400).json({ message: 'Invalid JSON body' });
+  }
 
-  // Validasi data yang diperlukan
-  if (!orderId || grossAmount === undefined || !customerDetails || !itemDetails) {
-    return res.status(400).json({ message: 'Missing required parameters' });
+  const { orderId, grossAmount, customerDetails, itemDetails } = body;
+
+  // Validasi data yang diperlukan dan berikan pesan error spesifik
+  if (!orderId) {
+    console.error('Missing orderId');
+    return res.status(400).json({ message: 'Missing orderId' });
+  }
+  if (grossAmount === undefined) {
+    console.error('Missing grossAmount');
+    return res.status(400).json({ message: 'Missing grossAmount' });
+  }
+  if (!customerDetails) {
+    console.error('Missing customerDetails');
+    return res.status(400).json({ message: 'Missing customerDetails' });
+  }
+  if (!itemDetails) {
+    console.error('Missing itemDetails');
+    return res.status(400).json({ message: 'Missing itemDetails' });
   }
 
   const parameter = {
