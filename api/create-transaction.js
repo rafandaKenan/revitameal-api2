@@ -21,6 +21,12 @@ function runMiddleware(req, res, fn) {
   });
 }
 
+console.log("--- Checking Environment Variables ---");
+console.log("MIDTRANS_SERVER_KEY:", process.env.MIDTRANS_SERVER_KEY ? "Loaded" : "!!! NOT FOUND !!!");
+console.log("MIDTRANS_CLIENT_KEY:", process.env.MIDTRANS_CLIENT_KEY ? "Loaded" : "!!! NOT FOUND !!!");
+console.log("MIDTRANS_IS_PRODUCTION:", process.env.MIDTRANS_IS_PRODUCTION);
+console.log("------------------------------------");
+
 // Inisialisasi Midtrans Snap API
 const snap = new midtransClient.Snap({
     // Gunakan variabel lingkungan Vercel
