@@ -43,17 +43,21 @@ module.exports = async (req, res) => {
 
   // Gunakan try...catch untuk menangani error
   try {
-    // Langsung ambil seluruh body dari Postman/frontend
-    const parameter = req.body; 
+  // Langsung ambil seluruh body dari Postman/frontend
+  const parameter = req.body; 
 
-    // Ganti atau tambahkan order_id yang unik dari sisi server
-    // Untuk mencegah order_id yang sama dikirim berkali-kali dari client.
-    parameter.transaction_details.order_id = `ORDER-${Date.now()}`;
+  // Ganti atau tambahkan order_id yang unik dari sisi server
+  parameter.transaction_details.order_id = `ORDER-${Date.now()}`;
 
-    const transaction = await snap.createTransaction(parameter);
-    
-    // Kirim token dan redirect_url jika berhasil
-    res.status(200).json({ token: transaction.token, redirect_url: transaction.redirect_url });
+  // --- TAMBAHKAN BARIS DEBUGGING DI SINI ---
+  console.log("Data being sent to Midtrans:", JSON.stringify(parameter, null, 2));
+  // -----------------------------------------
+
+  const transaction = await snap.createTransaction(parameter);
+  
+  // Kirim token dan redirect_url jika berhasil
+  res.status(200).json({ token: transaction.token, redirect_url: transaction.redirect_url });
+
 
   } catch (error) {
     // === BAGIAN YANG HILANG ADA DI SINI ===
