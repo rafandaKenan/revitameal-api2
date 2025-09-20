@@ -58,7 +58,9 @@ module.exports = async (req, res) => {
         res.status(200).json({ token: transactionToken.token });
 
     } catch (error) {
-        console.error('Error creating transaction:', error);
-        res.status(500).json({ error: 'Failed to create transaction', details: error.message });
+        console.error("RAW MIDTRANS ERROR:", error);
+  
+  // Kirimkan respons seperti biasa
+  res.status(500).json({ message: "Failed to create transaction" });
     }
 };
