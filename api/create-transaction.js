@@ -2,10 +2,27 @@
 const midtransClient = require('midtrans-client');
 const cors = require('cors');
 
-// ... (kode corsMiddleware dan runMiddleware tetap sama) ...
-const corsMiddleware = cors({ origin: '*', methods: ['POST'], allowedHeaders: ['Content-Type'] });
-function runMiddleware(req, res, fn) { /* ... implementasi sama ... */ }
+// CORS middleware configuration
+const corsMiddleware = cors({
+  origin: '*',
+  methods: ['POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: false
+});
 
+// Helper function to run middleware
+function runMiddleware(req, res, fn) {
+  return new Promise((resolve, reject) => {
+    fn(req, res, (result) => {
+      if (result instanceof Error) {
+        return reject(result);
+      }
+      return resolve(result);
+    });
+  });
+}
+
+// Initialize Midtrans Snap
 const snap = new midtransClient.Snap({
   isProduction: process.env.MIDTRANS_IS_PRODUCTION === 'true',
   serverKey: process.env.MIDTRANS_SERVER_KEY,
@@ -13,46 +30,90 @@ const snap = new midtransClient.Snap({
 });
 
 module.exports = async (req, res) => {
-  await runMiddleware(req, res, corsMiddleware);
-
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method Not Allowed' });
-  }
-
-  let parameter;
   try {
-    parameter = req.body;
-    const uniqueOrderId = ORDER-${Date.now()}-${Math.random().toString(36).substr(2, 5)};
-    parameter.transaction_details.order_id = uniqueOrderId;
-    parameter.credit_card = { secure: true };
-
-    const transaction = await snap.createTransaction(parameter);
-    res.status(200).json({ snapToken: transaction.token, redirect_url: transaction.redirect_url });
-
-  } catch (error) {
-    // --- BLOK ERROR HANDLING BARU ---
-    console.error("Error creating Midtrans transaction:", JSON.stringify(error, null, 2));
-
-    // Cek apakah ini error spesifik dari API Midtrans
-    if (error.httpStatusCode) {
-      // Jika ya, gunakan status code dan pesan dari Midtrans
-      const statusCode = parseInt(error.httpStatusCode, 10);
-      const errorMessage = error.ApiResponse?.error_messages || ["An error occurred with the payment gateway."];
-      
-      res.status(statusCode).json({
-        message: "Midtrans API Error",
-        error_details: errorMessage,
-        midtrans_status_code: statusCode,
-        sent_parameters: parameter // Opsional: tetap kirim parameter untuk debug
-      });
-    } else {
-      // Jika ini error lain (internal), gunakan respons 500
-      res.status(500).json({
-        message: "Internal Server Error",
-        error_details: error.message,
-        sent_parameters: parameter
+    // Handle CORS
+    await runMiddleware(req, res, corsMiddleware);
+    
+    // Handle preflight OPTIONS request
+    if (req.method === 'OPTIONS') {
+      return res.status(200).end();
+    }
+    
+    // Only allow POST method
+    if (req.method !== 'POST') {
+      return res.status(405).json({ 
+        error: 'Method Not Allowed',
+        message: 'Only POST method is allowed' 
       });
     }
-    // --- AKHIR BLOK BARU ---
+
+    // Check if request body exists
+    if (!req.body) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'Request body is required'
+      });
+    }
+
+    // Validate required fields
+    const { transaction_details, customer_details, item_details } = req.body;
+    
+    if (!transaction_details || !transaction_details.gross_amount) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'transaction_details with gross_amount is required'
+      });
+    }
+
+    // Create parameter object
+    const parameter = {
+      ...req.body,
+      transaction_details: {
+        ...transaction_details,
+        // FIX: Proper template literal syntax
+        order_id: `ORDER-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`
+      },
+      credit_card: {
+        secure: true
+      }
+    };
+
+    console.log('Creating transaction with parameter:', JSON.stringify(parameter, null, 2));
+
+    // Create transaction with Midtrans
+    const transaction = await snap.createTransaction(parameter);
+    
+    console.log('Transaction created successfully:', transaction);
+
+    // Send successful response
+    return res.status(200).json({
+      success: true,
+      snapToken: transaction.token,
+      redirect_url: transaction.redirect_url
+    });
+
+  } catch (error) {
+    console.error("Error creating Midtrans transaction:", error);
+
+    // Handle Midtrans API errors
+    if (error.httpStatusCode) {
+      const statusCode = parseInt(error.httpStatusCode, 10);
+      const errorMessages = error.ApiResponse?.error_messages || [error.message || "Payment gateway error"];
+      
+      return res.status(statusCode).json({
+        success: false,
+        error: "Midtrans API Error",
+        message: errorMessages[0],
+        error_details: errorMessages,
+        midtrans_status_code: statusCode
+      });
+    }
+
+    // Handle other errors (network, validation, etc.)
+    return res.status(500).json({
+      success: false,
+      error: "Internal Server Error",
+      message: error.message || "An unexpected error occurred"
+    });
   }
 };
