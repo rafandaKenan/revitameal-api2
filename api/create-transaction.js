@@ -41,33 +41,30 @@ module.exports = async (req, res) => {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  // Gunakan try...catch untuk menangani error
+  // Deklarasikan 'parameter' di sini agar bisa diakses oleh blok catch
+  let parameter;
+
   try {
-  // Langsung ambil seluruh body dari Postman/frontend
-  const parameter = req.body; 
+    // Isi nilainya di dalam blok try
+    parameter = req.body; 
 
-  // Ganti atau tambahkan order_id yang unik dari sisi server
-  parameter.transaction_details.order_id = `ORDER-${Date.now()}`;
+    // Ganti atau tambahkan order_id yang unik dari sisi server
+    parameter.transaction_details.order_id = `ORDER-${Date.now()}`;
 
-  // --- TAMBAHKAN BARIS DEBUGGING DI SINI ---
-  console.log("Data being sent to Midtrans:", JSON.stringify(parameter, null, 2));
-  // -----------------------------------------
-
-  const transaction = await snap.createTransaction(parameter);
-  
-  // Kirim token dan redirect_url jika berhasil
-  res.status(200).json({ token: transaction.token, redirect_url: transaction.redirect_url });
-
+    const transaction = await snap.createTransaction(parameter);
+    
+    res.status(200).json({ token: transaction.token, redirect_url: transaction.redirect_url });
 
   } catch (error) {
-    // === BAGIAN YANG HILANG ADA DI SINI ===
-    // Jika terjadi error, log detailnya di Vercel
+    // Bagian ini sekarang lebih canggih
     console.error("Error creating Midtrans transaction:", error);
     
-    // Kirim respons error yang jelas ke client
+    // Kirim respons error yang jelas DAN data yang menyebabkan error
     res.status(500).json({ 
       message: "Failed to create transaction", 
-      error_details: error.message 
+      error_details: error.message,
+      // INI BAGIAN PENTING: Kita kirim kembali data yang kita terima
+      sent_parameters: parameter 
     });
   }
 };
