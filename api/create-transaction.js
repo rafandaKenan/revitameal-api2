@@ -2,14 +2,6 @@
 const midtransClient = require('midtrans-client');
 const cors = require('cors');
 
-// (Opsional) Baris-baris log ini bisa Anda hapus jika Anda sudah yakin
-// Environment Variables sudah terbaca dengan benar.
-console.log("--- Vercel Function Initializing ---");
-console.log("SERVER_KEY from env:", process.env.MIDTRANS_SERVER_KEY ? "✅ Loaded" : "❌ NOT FOUND");
-console.log("CLIENT_KEY from env:", process.env.MIDTRANS_CLIENT_KEY ? "✅ Loaded" : "❌ NOT FOUND");
-console.log("IS_PRODUCTION from env:", process.env.MIDTRANS_IS_PRODUCTION);
-console.log("------------------------------------");
-
 const corsMiddleware = cors({
   // Di tahap produksi, ganti '*' dengan domain frontend Anda
   origin: '*', 
