@@ -30,10 +30,13 @@ module.exports = async (req, res) => {
   }
 
   try {
-    console.log('Raw request body:', req.body);
-    console.log('Request headers:', req.headers);
-    
-    // Parse body if it's string (sometimes Vercel sends it as string)
+    console.log('Request received:', {
+      method: req.method,
+      body: req.body,
+      bodyType: typeof req.body
+    });
+
+    // Parse body if needed
     let body = req.body;
     if (typeof body === 'string') {
       try {
@@ -48,30 +51,9 @@ module.exports = async (req, res) => {
       }
     }
 
-    // Check if request body exists and has required fields
-    if (!body || typeof body !== 'object') {
-      console.error('Invalid or missing body:', body);
-      return res.status(400).json({
-        success: false,
-        error: 'Bad Request',
-        message: 'Request body is required and must be JSON object'
-      });
-    }
-
     // Validate required fields
-    const { transaction_details } = body;
-    
-    if (!transaction_details) {
-      console.error('Missing transaction_details in body:', body);
-      return res.status(400).json({
-        success: false,
-        error: 'Bad Request',
-        message: 'transaction_details is required'
-      });
-    }
-
-    if (!transaction_details.gross_amount) {
-      console.error('Missing gross_amount in transaction_details:', transaction_details);
+    if (!body || !body.transaction_details || !body.transaction_details.gross_amount) {
+      console.error('Missing required fields in body:', body);
       return res.status(400).json({
         success: false,
         error: 'Bad Request',
@@ -84,11 +66,11 @@ module.exports = async (req, res) => {
     const randomString = Math.random().toString(36).substr(2, 5);
     const uniqueOrderId = `ORDER-${timestamp}-${randomString}`;
 
-    // Create parameter object with all required fields
+    // Create parameter object
     const parameter = {
       transaction_details: {
         order_id: uniqueOrderId,
-        gross_amount: transaction_details.gross_amount
+        gross_amount: body.transaction_details.gross_amount
       },
       credit_card: {
         secure: true
@@ -105,13 +87,15 @@ module.exports = async (req, res) => {
     const transaction = await snap.createTransaction(parameter);
     
     console.log('Transaction created successfully:', {
-      token: transaction.token ? 'Generated' : 'Missing',
-      redirect_url: transaction.redirect_url ? 'Generated' : 'Missing'
+      hasToken: !!transaction.token,
+      hasRedirectUrl: !!transaction.redirect_url,
+      orderId: uniqueOrderId
     });
 
     // Send successful response
     return res.status(200).json({
       success: true,
+      message: 'Transaction created successfully',
       data: {
         snapToken: transaction.token,
         redirect_url: transaction.redirect_url,
@@ -120,9 +104,8 @@ module.exports = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Detailed error:", {
+    console.error("Error creating transaction:", {
       message: error.message,
-      stack: error.stack,
       httpStatusCode: error.httpStatusCode,
       ApiResponse: error.ApiResponse
     });
@@ -151,8 +134,7 @@ module.exports = async (req, res) => {
     return res.status(500).json({
       success: false,
       error: "Internal Server Error",
-      message: error.message || "An unexpected error occurred",
-      error_details: error.stack
+      message: error.message || "An unexpected error occurred"
     });
   }
 };
