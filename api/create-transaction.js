@@ -9,7 +9,6 @@ console.log("SERVER_KEY from env:", process.env.MIDTRANS_SERVER_KEY ? "✅ Loade
 console.log("CLIENT_KEY from env:", process.env.MIDTRANS_CLIENT_KEY ? "✅ Loaded" : "❌ NOT FOUND");
 console.log("IS_PRODUCTION from env:", process.env.MIDTRANS_IS_PRODUCTION);
 console.log("------------------------------------");
-// --- LANGKAH DEBUGGING SELESAI ---
 
 const corsMiddleware = cors({
   origin: '*',
