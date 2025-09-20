@@ -2,7 +2,6 @@
 const midtransClient = require('midtrans-client');
 const cors = require('cors');
 
-// --- LANGKAH DEBUGGING DIMULAI DI SINI ---
 // Kita akan memeriksa isi environment variable SEBELUM GAGAL.
 console.log("--- Vercel Function Initializing ---");
 console.log("SERVER_KEY from env:", process.env.MIDTRANS_SERVER_KEY ? "✅ Loaded" : "❌ NOT FOUND");
