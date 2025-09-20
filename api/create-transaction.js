@@ -2,8 +2,15 @@
 const midtransClient = require('midtrans-client');
 const cors = require('cors');
 
-// Konfigurasi CORS.
-// Izinkan semua origin. Atur ke domain frontend Anda di lingkungan produksi untuk keamanan.
+// --- LANGKAH DEBUGGING DIMULAI DI SINI ---
+// Kita akan memeriksa isi environment variable SEBELUM GAGAL.
+console.log("--- Vercel Function Initializing ---");
+console.log("SERVER_KEY from env:", process.env.MIDTRANS_SERVER_KEY ? "✅ Loaded" : "❌ NOT FOUND");
+console.log("CLIENT_KEY from env:", process.env.MIDTRANS_CLIENT_KEY ? "✅ Loaded" : "❌ NOT FOUND");
+console.log("IS_PRODUCTION from env:", process.env.MIDTRANS_IS_PRODUCTION);
+console.log("------------------------------------");
+// --- LANGKAH DEBUGGING SELESAI ---
+
 const corsMiddleware = cors({
   origin: '*',
   methods: ['POST'],
@@ -21,52 +28,29 @@ function runMiddleware(req, res, fn) {
   });
 }
 
-console.log("--- Checking Environment Variables ---");
-console.log("MIDTRANS_SERVER_KEY:", process.env.MIDTRANS_SERVER_KEY ? "Loaded" : "!!! NOT FOUND !!!");
-console.log("MIDTRANS_CLIENT_KEY:", process.env.MIDTRANS_CLIENT_KEY ? "Loaded" : "!!! NOT FOUND !!!");
-console.log("MIDTRANS_IS_PRODUCTION:", process.env.MIDTRANS_IS_PRODUCTION);
-console.log("------------------------------------");
-
 // Inisialisasi Midtrans Snap API
 const snap = new midtransClient.Snap({
-    // Gunakan variabel lingkungan Vercel
-    isProduction: process.env.MIDTRANS_IS_PRODUCTION === 'true',
-    serverKey: process.env.MIDTRANS_SERVER_KEY,
-    clientKey: process.env.MIDTRANS_CLIENT_KEY,
+  isProduction: process.env.MIDTRANS_IS_PRODUCTION === 'true',
+  serverKey: process.env.MIDTRANS_SERVER_KEY,
+  clientKey: process.env.MIDTRANS_CLIENT_KEY,
 });
 
 module.exports = async (req, res) => {
-    // Jalankan middleware CORS terlebih dahulu
-    await runMiddleware(req, res, corsMiddleware);
+  await runMiddleware(req, res, corsMiddleware);
 
-    // Cek metode permintaan
-    if (req.method !== 'POST') {
-        return res.status(405).json({ error: 'Method Not Allowed' });
-    }
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method Not Allowed' });
+  }
 
-    try {
-        // Logika untuk membuat transaksi
-        const orderId = `ORDER-${Date.now()}`;
-        
-        const { gross_amount, customer_details, item_details } = req.body;
-        
-        const parameter = {
-            transaction_details: {
-                order_id: orderId,
-                gross_amount: gross_amount,
-            },
-            customer_details: customer_details,
-            item_details: item_details,
-        };
+  try {
+    // Di Postman, pastikan Anda mengirim body JSON yang lengkap
+    // seperti contoh yang saya berikan sebelumnya.
+    const parameter = req.body; 
+    const transaction = await snap.createTransaction(parameter);
+    res.status(200).json({ token: transaction.token, redirect_url: transaction.redirect_url });
 
-        const transactionToken = await snap.createTransaction(parameter);
-        
-        res.status(200).json({ token: transactionToken.token });
-
-    } catch (error) {
-        console.error("RAW MIDTRANS ERROR:", error);
-  
-  // Kirimkan respons seperti biasa
-  res.status(500).json({ message: "Failed to create transaction" });
-    }
+  } catch (error) {
+    console.error("RAW MIDTRANS ERROR in CATCH BLOCK:", error);
+    res.status(500).json({ message: "Failed to create transaction", error_details: error.message });
+  }
 };
