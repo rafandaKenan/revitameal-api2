@@ -1,4 +1,3 @@
-// api/create-transaction.js
 const midtransClient = require('midtrans-client');
 
 // Initialize Midtrans Snap
@@ -21,64 +20,39 @@ module.exports = async (req, res) => {
 
   // Only allow POST method
   if (req.method !== 'POST') {
-    console.log('Method not allowed:', req.method);
-    return res.status(405).json({ 
+    return res.status(405).json({
       success: false,
       error: 'Method Not Allowed',
-      message: `Method ${req.method} is not allowed. Use POST.`
     });
   }
 
   try {
-    console.log('Request received:', {
-      method: req.method,
-      body: req.body,
-      bodyType: typeof req.body
-    });
-
-    // Parse body if needed
-    let body = req.body;
-    if (typeof body === 'string') {
-      try {
-        body = JSON.parse(body);
-      } catch (parseError) {
-        console.error('JSON parse error:', parseError);
-        return res.status(400).json({
-          success: false,
-          error: 'Invalid JSON',
-          message: 'Request body must be valid JSON'
-        });
-      }
-    }
+    const body = req.body;
 
     // Validate required fields
-    if (!body || !body.transaction_details || !body.transaction_details.gross_amount) {
-      console.error('Missing required fields in body:', body);
+    if (!body || !body.transaction_details || !body.transaction_details.order_id) {
       return res.status(400).json({
         success: false,
         error: 'Bad Request',
-        message: 'transaction_details.gross_amount is required'
+        message: 'transaction_details.order_id is required from the frontend'
       });
     }
 
-    // Create unique order ID
-    const timestamp = Date.now();
-    const randomString = Math.random().toString(36).substr(2, 5);
-    const uniqueOrderId = `ORDER-${timestamp}-${randomString}`;
-
-    // Create parameter object
+    // --- PERUBAHAN UTAMA DI SINI ---
+    // Gunakan order_id dari frontend, jangan buat yang baru.
+    // Tambahkan customer_details dan shipping_address dari body.
     const parameter = {
       transaction_details: {
-        order_id: uniqueOrderId,
+        order_id: body.transaction_details.order_id,
         gross_amount: body.transaction_details.gross_amount
       },
       credit_card: {
         secure: true
       },
-      // Include optional fields if provided
-      ...(body.customer_details && { customer_details: body.customer_details }),
-      ...(body.item_details && { item_details: body.item_details }),
-      ...(body.callbacks && { callbacks: body.callbacks })
+      customer_details: body.customer_details,
+      item_details: body.item_details,
+      // Memastikan shipping_address ditambahkan jika ada
+      ...(body.shipping_address && { shipping_address: body.shipping_address })
     };
 
     console.log('Creating transaction with parameter:', JSON.stringify(parameter, null, 2));
@@ -86,12 +60,6 @@ module.exports = async (req, res) => {
     // Create transaction with Midtrans
     const transaction = await snap.createTransaction(parameter);
     
-    console.log('Transaction created successfully:', {
-      hasToken: !!transaction.token,
-      hasRedirectUrl: !!transaction.redirect_url,
-      orderId: uniqueOrderId
-    });
-
     // Send successful response
     return res.status(200).json({
       success: true,
@@ -99,42 +67,19 @@ module.exports = async (req, res) => {
       data: {
         snapToken: transaction.token,
         redirect_url: transaction.redirect_url,
-        order_id: uniqueOrderId
+        // Kembalikan order_id yang sama untuk konsistensi
+        order_id: body.transaction_details.order_id
       }
     });
 
   } catch (error) {
-    console.error("Error creating transaction:", {
-      message: error.message,
-      httpStatusCode: error.httpStatusCode,
-      ApiResponse: error.ApiResponse
-    });
-
-    // Handle Midtrans API errors
-    if (error.httpStatusCode) {
-      const statusCode = parseInt(error.httpStatusCode, 10);
-      let errorMessages = ['Payment gateway error'];
-      
-      if (error.ApiResponse?.error_messages) {
-        errorMessages = error.ApiResponse.error_messages;
-      } else if (error.message) {
-        errorMessages = [error.message];
-      }
-      
-      return res.status(statusCode).json({
-        success: false,
-        error: "Midtrans API Error",
-        message: errorMessages[0],
-        error_details: errorMessages,
-        midtrans_status_code: statusCode
-      });
-    }
-
-    // Handle other errors
+    console.error("Error creating transaction:", error);
+    
     return res.status(500).json({
       success: false,
       error: "Internal Server Error",
-      message: error.message || "An unexpected error occurred"
+      message: error.message || "An unexpected error occurred",
+      ...(error.ApiResponse && { details: error.ApiResponse })
     });
   }
 };
