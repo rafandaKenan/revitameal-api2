@@ -204,7 +204,10 @@ module.exports = async (req, res) => {
         paymentType: statusResponse.payment_type,
         transactionStatus: transactionStatus,
         fraudStatus: fraudStatus,
-        grossAmount: statusResponse.gross_amount,
+        // FIX: Update pricing.total (yang dibuat frontend) dengan nilai numerik
+        'pricing.total': parseFloat(statusResponse.gross_amount) || 0,
+        // Simpan juga grossAmount di root untuk konsistensi, pastikan sebagai angka
+        grossAmount: parseFloat(statusResponse.gross_amount) || 0,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         lastWebhookAt: admin.firestore.FieldValue.serverTimestamp(),
         midtransResponse: statusResponse // Simpan semua response untuk debug
