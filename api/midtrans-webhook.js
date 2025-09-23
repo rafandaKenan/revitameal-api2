@@ -49,7 +49,8 @@ async function handlePaymentPending(orderRef, statusResponse) {
   try {
     await orderRef.update({
       status: 'pending_payment',
-      paymentInstructions: statusResponse.va_numbers || statusResponse.permata_va_number || statusResponse.bca_va_number,
+      // FIX: Memberikan objek kosong {} sebagai fallback jika tidak ada instruksi pembayaran (misal: untuk QRIS)
+      paymentInstructions: statusResponse.va_numbers || statusResponse.permata_va_number || statusResponse.bca_va_number || {},
       pendingAt: admin.firestore.FieldValue.serverTimestamp(),
     });
   } catch (error) {
@@ -224,5 +225,4 @@ module.exports = async (req, res) => {
     return res.status(200).json({ message: 'Webhook received but an internal error occurred.' });
   }
 };
-
 
