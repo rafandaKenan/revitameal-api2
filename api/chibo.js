@@ -94,7 +94,8 @@ module.exports = async (req, res) => {
     }
 
     const menuContext = await getMenuContext();
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    // PERBAIKAN: Menggunakan nama model yang lebih stabil
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
 
     const systemInstructionString = `
       Anda adalah Chibo, asisten nutrisi dari Revitameal.
