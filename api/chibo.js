@@ -114,7 +114,10 @@ Aturan:
     const chat = model.startChat({
       history: [],
       generationConfig: { maxOutputTokens: 1000 },
-      systemInstruction: systemInstructionString
+      systemInstruction: {
+      role: "system",
+      parts: [{ text: systemInstructionString }]
+  }
 
     });
 
