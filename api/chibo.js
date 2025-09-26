@@ -136,22 +136,27 @@ module.exports = async (req, res) => {
     const menuData = await getMenuContext();
     const formattedMenu = formatMenuForAI(menuData);
 
-    // Coba beberapa model name yang mungkin tersedia
+    // Daftar model yang benar berdasarkan dokumentasi resmi Google AI
     const modelVariants = [
-      "gemini-1.5-flash-latest",
-      "gemini-1.5-flash",
-      "gemini-1.5-pro-latest", 
-      "gemini-1.5-pro",
-      "gemini-pro"
+      "gemini-2.5-flash",      // Latest stable 2.5 Flash
+      "gemini-2.0-flash",      // Latest stable 2.0 Flash  
+      "gemini-1.5-flash",      // Latest stable 1.5 Flash
+      "gemini-2.5-pro",        // Latest stable 2.5 Pro
+      "gemini-1.5-pro",        // Latest stable 1.5 Pro
+      "gemini-2.0-flash-001",  // Specific stable version
+      "gemini-1.5-flash-001",  // Specific stable version
+      "gemini-1.5-flash-002"   // Specific stable version
     ];
 
     let model = null;
     let modelUsed = null;
+    let lastError = null;
 
     // Coba setiap variant model sampai ada yang berhasil
     for (const modelName of modelVariants) {
       try {
         console.log(`Trying model: ${modelName}`);
+        
         model = genAI.getGenerativeModel({ 
           model: modelName,
           systemInstruction: `Anda adalah Chibo, asisten nutrisi dari Revitameal yang ramah dan membantu.
@@ -163,16 +168,23 @@ ATURAN PENTING:
 4. Jangan memberikan nasihat medis - berikan disclaimer jika perlu
 5. Fokus pada informasi menu: nama, kalori, harga, tipe`
         });
+        
+        // Test model dengan pesan sederhana
+        await model.generateContent("Test");
+        
         modelUsed = modelName;
+        console.log(`Successfully initialized model: ${modelName}`);
         break;
+        
       } catch (error) {
         console.log(`Model ${modelName} failed:`, error.message);
+        lastError = error;
         continue;
       }
     }
 
     if (!model) {
-      throw new Error("Tidak ada model Gemini yang tersedia");
+      throw new Error(`Semua model Gemini tidak tersedia. Last error: ${lastError?.message}`);
     }
 
     console.log(`Using model: ${modelUsed}`);
@@ -213,6 +225,8 @@ Jawab berdasarkan menu di atas dengan bahasa Indonesia yang ramah.`;
       errorMessage = "Server sedang sibuk. Silakan coba lagi dalam beberapa saat.";
     } else if (error.message.includes("API key")) {
       errorMessage = "Konfigurasi server bermasalah. Hubungi administrator.";
+    } else if (error.message.includes("PERMISSION_DENIED")) {
+      errorMessage = "Akses ke layanan AI terbatas. Silakan hubungi administrator.";
     }
     
     res.status(500).json({
