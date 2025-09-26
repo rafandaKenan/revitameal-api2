@@ -6,13 +6,13 @@ let db;
 let firebaseAdminError = null;
 
 try {
-  // 1. Memeriksa apakah environment variable ada SEBELUM digunakan
-  if (!process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
-    throw new Error("FIREBASE_SERVICE_ACCOUNT_KEY environment variable tidak diatur.");
+  // PERBAIKAN: Mengubah nama variabel agar sesuai dengan pengaturan Vercel Anda
+  if (!process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+    throw new Error("FIREBASE_SERVICE_ACCOUNT_JSON environment variable tidak diatur.");
   }
   
   const serviceAccount = JSON.parse(
-    Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_KEY, 'base64').toString('utf-8')
+    Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_JSON, 'base64').toString('utf-8')
   );
 
   if (!admin.apps.length) {
@@ -22,7 +22,7 @@ try {
   }
   db = admin.firestore();
 } catch (error) {
-  // 2. Menyimpan pesan error jika inisialisasi gagal
+  // Menyimpan pesan error jika inisialisasi gagal
   firebaseAdminError = error.message;
   console.error('Firebase Admin Initialization Error:', firebaseAdminError);
 }
@@ -32,7 +32,7 @@ try {
 let genAI;
 let geminiError = null;
 
-// 3. Memeriksa kunci API Gemini
+// Memeriksa kunci API Gemini
 if (process.env.GEMINI_API_KEY) {
   genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 } else {
@@ -76,13 +76,13 @@ export default async function handler(req, res) {
   const allowedOrigin = process.env.FRONTEND_URL || '*';
   res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
   
-  // 4. Memberikan respons error yang jelas jika service gagal di-load
+  // Memberikan respons error yang jelas jika service gagal di-load
   if (firebaseAdminError) {
     return res.status(503).json({ error: "Service Unavailable", message: `Koneksi Firebase gagal: ${firebaseAdminError}` });
   }
@@ -131,7 +131,12 @@ export default async function handler(req, res) {
 
   } catch (error) {
     console.error("Error in handler:", error);
-    res.status(500).json({ error: "Maaf, terjadi kesalahan di server Chibo." });
+    // Mengembalikan pesan error yang lebih detail untuk debugging
+    res.status(500).json({
+      error: "Internal Server Error",
+      message: "Maaf, terjadi kesalahan di server Chibo.",
+      detailError: error.message
+    });
   }
 }
 
