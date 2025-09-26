@@ -7,11 +7,10 @@ let db;
 let firebaseAdminError = null;
 
 try {
-  // Memeriksa environment variable
   if (!process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
     throw new Error("FIREBASE_SERVICE_ACCOUNT_JSON environment variable tidak diatur.");
   }
-  
+
   const serviceAccount = JSON.parse(
     Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_JSON, 'base64').toString('utf-8')
   );
@@ -41,7 +40,7 @@ if (process.env.GEMINI_API_KEY) {
 // Fungsi untuk mengambil data menu dari Firestore
 async function getMenuContext() {
   if (!db) {
-      return "Koneksi ke database menu gagal.";
+    return "Koneksi ke database menu gagal.";
   }
   try {
     const menuCollection = await db.collection('revitameal_menu_templates').get();
@@ -49,14 +48,14 @@ async function getMenuContext() {
       return "Saat ini tidak ada data menu yang tersedia.";
     }
     const menuData = menuCollection.docs.map(doc => {
-        const data = doc.data();
-        return {
-            nama: data.name,
-            deskripsi: data.description,
-            kalori: data.calories,
-            harga: data.basePrice,
-            tipe: data.type
-        };
+      const data = doc.data();
+      return {
+        nama: data.name,
+        deskripsi: data.description,
+        kalori: data.calories,
+        harga: data.basePrice,
+        tipe: data.type
+      };
     });
     return `Berikut adalah data menu yang tersedia di Revitameal: ${JSON.stringify(menuData)}`;
   } catch (error) {
@@ -65,7 +64,7 @@ async function getMenuContext() {
   }
 }
 
-// Menggunakan 'module.exports' untuk handler utama
+// --- Handler utama ---
 module.exports = async (req, res) => {
   const allowedOrigin = process.env.FRONTEND_URL || '*';
   res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
@@ -75,7 +74,7 @@ module.exports = async (req, res) => {
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
-  
+
   if (firebaseAdminError) {
     return res.status(503).json({ error: "Service Unavailable", message: `Koneksi Firebase gagal: ${firebaseAdminError}` });
   }
@@ -94,35 +93,36 @@ module.exports = async (req, res) => {
     }
 
     const menuContext = await getMenuContext();
-    // PERBAIKAN: Menggunakan nama model yang lebih stabil
+
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
 
     const systemInstructionString = `
-      Anda adalah Chibo, asisten nutrisi dari Revitameal.
-      Anda ramah dan siap membantu.
-      
-      KONTEKS DARI DATABASE:
-      ${menuContext}
+Anda adalah Chibo, asisten nutrisi dari Revitameal.
+Anda ramah dan siap membantu.
 
-      Aturan:
-      1. Jawab semua pertanyaan tentang menu berdasarkan KONTEKS DARI DATABASE.
-      2. Jika pertanyaan di luar topik kesehatan atau menu, tolak dengan sopan.
-      3. Jangan pernah memberikan nasihat medis. Berikan disclaimer jika perlu.
-      4. Gunakan bahasa Indonesia.
-    `;
-    
-    // Perbaikan: Bungkus systemInstruction dalam format objek yang benar
+KONTEKS DARI DATABASE:
+${menuContext}
+
+Aturan:
+1. Jawab semua pertanyaan tentang menu berdasarkan KONTEKS DARI DATABASE.
+2. Jika pertanyaan di luar topik kesehatan atau menu, tolak dengan sopan.
+3. Jangan pernah memberikan nasihat medis. Berikan disclaimer jika perlu.
+4. Gunakan bahasa Indonesia.
+`;
+
+    // 🔥 Perbaikan: gunakan role + parts (sesuai format Content)
     const chat = model.startChat({
       history: [],
       generationConfig: { maxOutputTokens: 1000 },
       systemInstruction: {
-        parts: [{ text: systemInstructionString }],
-      },
+        role: "system",
+        parts: [{ text: systemInstructionString }]
+      }
     });
 
     const result = await chat.sendMessage(message);
     const responseText = result.response.text();
-    
+
     res.status(200).json({ response: responseText });
 
   } catch (error) {
@@ -134,4 +134,3 @@ module.exports = async (req, res) => {
     });
   }
 };
-
