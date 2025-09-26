@@ -4,7 +4,7 @@ import admin from 'firebase-admin';
 // --- Inisialisasi Firebase Admin yang Lebih Aman ---
 let db;
 let firebaseAdminError = null;
-
+ 
 try {
   // PERBAIKAN: Mengubah nama variabel agar sesuai dengan pengaturan Vercel Anda
   if (!process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
