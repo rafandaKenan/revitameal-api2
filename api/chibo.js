@@ -96,7 +96,7 @@ module.exports = async (req, res) => {
     const menuContext = await getMenuContext();
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-    const systemInstruction = `
+    const systemInstructionString = `
       Anda adalah Chibo, asisten nutrisi dari Revitameal.
       Anda ramah dan siap membantu.
       
@@ -110,10 +110,13 @@ module.exports = async (req, res) => {
       4. Gunakan bahasa Indonesia.
     `;
     
+    // Perbaikan: Bungkus systemInstruction dalam format objek yang benar
     const chat = model.startChat({
       history: [],
       generationConfig: { maxOutputTokens: 1000 },
-      systemInstruction,
+      systemInstruction: {
+        parts: [{ text: systemInstructionString }],
+      },
     });
 
     const result = await chat.sendMessage(message);
