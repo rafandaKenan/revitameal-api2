@@ -1,13 +1,17 @@
 {
-  "name": "midtrans-vercel-backend",
+  "name": "revitameal-chibo-api",
   "version": "1.0.0",
-  "main": "index.js",
-  "license": "MIT",
-  "dependencies": {
-    "midtrans-client": "^1.4.3",
-    "firebase-admin": "^12.1.0"
-  },
+  "description": "API for the Chibo assistant and other backend functions.",
+  "main": "api/chibo.js",
   "scripts": {
-    "start": "vercel dev"
-  }
+    "start": "node api/chibo.js"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.14.1",
+    "firebase-admin": "^12.2.0",
+    "midtrans-client": "^1.3.1"
+  },
+  "author": "",
+  "license": "ISC"
 }
+
