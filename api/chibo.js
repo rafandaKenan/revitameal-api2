@@ -1,12 +1,13 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import admin from 'firebase-admin';
+// Menggunakan 'require' agar konsisten dengan API lain yang berfungsi
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+const admin = require('firebase-admin');
 
-// --- Inisialisasi Firebase Admin yang Lebih Aman ---
+// --- Inisialisasi Firebase Admin ---
 let db;
 let firebaseAdminError = null;
- 
+
 try {
-  // PERBAIKAN: Mengubah nama variabel agar sesuai dengan pengaturan Vercel Anda
+  // Memeriksa environment variable
   if (!process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
     throw new Error("FIREBASE_SERVICE_ACCOUNT_JSON environment variable tidak diatur.");
   }
@@ -22,28 +23,23 @@ try {
   }
   db = admin.firestore();
 } catch (error) {
-  // Menyimpan pesan error jika inisialisasi gagal
   firebaseAdminError = error.message;
   console.error('Firebase Admin Initialization Error:', firebaseAdminError);
 }
-// ----------------------------------------------------------------
 
-// --- Inisialisasi Google Gemini AI yang Lebih Aman ---
+// --- Inisialisasi Google Gemini AI ---
 let genAI;
 let geminiError = null;
 
-// Memeriksa kunci API Gemini
 if (process.env.GEMINI_API_KEY) {
   genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 } else {
   geminiError = "GEMINI_API_KEY environment variable tidak diatur.";
   console.error(geminiError);
 }
-// ----------------------------------------------------
 
 // Fungsi untuk mengambil data menu dari Firestore
 async function getMenuContext() {
-  // Pastikan 'db' sudah terinisialisasi
   if (!db) {
       return "Koneksi ke database menu gagal.";
   }
@@ -52,7 +48,6 @@ async function getMenuContext() {
     if (menuCollection.empty) {
       return "Saat ini tidak ada data menu yang tersedia.";
     }
-    
     const menuData = menuCollection.docs.map(doc => {
         const data = doc.data();
         return {
@@ -63,16 +58,15 @@ async function getMenuContext() {
             tipe: data.type
         };
     });
-    
-    return `Berikut adalah data menu yang tersedia di Revitameal dalam format JSON: ${JSON.stringify(menuData)}`;
+    return `Berikut adalah data menu yang tersedia di Revitameal: ${JSON.stringify(menuData)}`;
   } catch (error) {
     console.error("Error fetching menu from Firestore:", error);
     return "Terjadi kesalahan saat mencoba mengambil data menu dari database.";
   }
 }
 
-// Fungsi handler utama yang akan dijalankan oleh Vercel
-export default async function handler(req, res) {
+// Menggunakan 'module.exports' untuk handler utama
+module.exports = async (req, res) => {
   const allowedOrigin = process.env.FRONTEND_URL || '*';
   res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -82,7 +76,6 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
   
-  // Memberikan respons error yang jelas jika service gagal di-load
   if (firebaseAdminError) {
     return res.status(503).json({ error: "Service Unavailable", message: `Koneksi Firebase gagal: ${firebaseAdminError}` });
   }
@@ -104,18 +97,17 @@ export default async function handler(req, res) {
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
     const systemInstruction = `
-      Anda adalah Chibo, seorang asisten nutrisi dan kesehatan virtual dari Revitameal.
-      Anda ramah, berpengetahuan, dan siap membantu.
+      Anda adalah Chibo, asisten nutrisi dari Revitameal.
+      Anda ramah dan siap membantu.
       
-      KONTEKS PENTING DARI DATABASE:
+      KONTEKS DARI DATABASE:
       ${menuContext}
 
-      Aturan Anda:
-      1.  Gunakan bahasa Indonesia yang sopan dan mudah dimengerti.
-      2.  JAWAB SEMUA PERTANYAAN TENTANG MENU BERDASARKAN KONTEKS DARI DATABASE DI ATAS. Jika pengguna bertanya menu apa yang tersedia, atau detail tentang menu tertentu (seperti harga atau kalori), gunakan informasi tersebut.
-      3.  Jika pertanyaan di luar topik kesehatan atau menu Revitameal, tolak dengan sopan. Contoh: "Maaf, fokus saya adalah membantu Anda seputar nutrisi dan menu dari Revitameal."
-      4.  JANGAN PERNAH memberikan nasihat medis. Selalu berikan disclaimer: "Informasi ini tidak menggantikan nasihat medis profesional. Silakan berkonsultasi dengan dokter Anda." jika pertanyaan menyangkut kondisi medis.
-      5.  Jaga agar jawaban tetap singkat dan padat.
+      Aturan:
+      1. Jawab semua pertanyaan tentang menu berdasarkan KONTEKS DARI DATABASE.
+      2. Jika pertanyaan di luar topik kesehatan atau menu, tolak dengan sopan.
+      3. Jangan pernah memberikan nasihat medis. Berikan disclaimer jika perlu.
+      4. Gunakan bahasa Indonesia.
     `;
     
     const chat = model.startChat({
@@ -131,12 +123,11 @@ export default async function handler(req, res) {
 
   } catch (error) {
     console.error("Error in handler:", error);
-    // Mengembalikan pesan error yang lebih detail untuk debugging
     res.status(500).json({
       error: "Internal Server Error",
       message: "Maaf, terjadi kesalahan di server Chibo.",
       detailError: error.message
     });
   }
-}
+};
 
