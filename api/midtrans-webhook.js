@@ -12,17 +12,26 @@ const coreApi = new midtransClient.CoreApi({
 // Membaca seluruh service account dari satu environment variable
 if (!admin.apps.length) {
   try {
-    // Pastikan environment variable ada
     if (!process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
       throw new Error("Environment variable FIREBASE_SERVICE_ACCOUNT_JSON is not set.");
     }
-    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+    
+    let serviceAccountString = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+    
+    // Cek apakah Base64 encoded
+    if (serviceAccountString.startsWith('ewog')) {
+      console.log('Detected Base64 encoded service account, decoding...');
+      serviceAccountString = Buffer.from(serviceAccountString, 'base64').toString('utf-8');
+    }
+    
+    const serviceAccount = JSON.parse(serviceAccountString);
     admin.initializeApp({
       credential: admin.credential.cert(serviceAccount),
     });
     console.log("Firebase Admin SDK initialized successfully.");
   } catch (e) {
     console.error('!!! Firebase Admin Initialization Error:', e.message);
+    throw e; // Re-throw untuk menghentikan eksekusi
   }
 }
 const db = admin.firestore();
