@@ -87,6 +87,8 @@ module.exports = async (req, res) => {
 
     const transaction = await snap.createTransaction(parameter);
 
+    console.log("Full Midtrans API Response:", JSON.stringify(transaction, null, 2));
+
     return res.status(200).json({
       success: true,
       message: 'Transaction created successfully',
