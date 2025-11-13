@@ -4,10 +4,9 @@ const crypto = require("crypto");
 // === CONSTANTS ===
 const FRONTEND_URL = "https://revitameal-82d2e.web.app";
 
-// PILIH SALAH SATU BASE URL (gunakan environment variable untuk flexibility)
-// Option 1: API Sandbox (gunakan endpoint: /checkout/v1/payment)
-// Option 2: Full Sandbox Suite (gunakan endpoint: /suite/checkout/v1/payment)
-const DOKU_BASE_URL = process.env.DOKU_BASE_URL || "https://api-sandbox.doku.com";
+// Base URL DOKU - HARUS SESUAI dengan environment credential
+// Gunakan environment variable untuk flexibility
+const DOKU_BASE_URL = process.env.DOKU_BASE_URL || "https://sandbox.doku.com";
 
 // ===== HELPER FUNCTIONS =====
 
