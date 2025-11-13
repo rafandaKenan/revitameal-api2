@@ -3,47 +3,58 @@ const crypto = require("crypto");
 
 // === CONSTANTS ===
 const FRONTEND_URL = "https://revitameal-82d2e.web.app";
-const DOKU_BASE_URL = "https://api-sandbox.doku.com";
+
+// PILIH SALAH SATU BASE URL (gunakan environment variable untuk flexibility)
+// Option 1: API Sandbox (gunakan endpoint: /checkout/v1/payment)
+// Option 2: Full Sandbox Suite (gunakan endpoint: /suite/checkout/v1/payment)
+const DOKU_BASE_URL = process.env.DOKU_BASE_URL || "https://api-sandbox.doku.com";
 
 // ===== HELPER FUNCTIONS =====
 
 /**
  * Generate Digest dari request body
- * PENTING: Hanya base64 string, TANPA prefix "SHA-256="
- * Sesuai dokumentasi DOKU: Digest = Base64(SHA256(JSON body))
  */
 function generateDigest(body) {
-  const json = JSON.stringify(body);
-  const hash = crypto.createHash("sha256").update(json, "utf-8").digest();
-  return Buffer.from(hash).toString("base64");
+  const jsonString = JSON.stringify(body);
+  const sha256Hash = crypto.createHash("sha256").update(jsonString, "utf-8").digest();
+  return sha256Hash.toString("base64");
 }
 
 /**
- * Generate DOKU signature
- * Format: HMACSHA256=<base64_encoded_signature>
+ * Generate DOKU Signature
  */
 function generateSignature(clientId, requestId, timestamp, target, digest, secretKey) {
-  const stringToSign =
+  const componentSignature = 
     `Client-Id:${clientId}\n` +
     `Request-Id:${requestId}\n` +
     `Request-Timestamp:${timestamp}\n` +
     `Request-Target:${target}\n` +
     `Digest:${digest}`;
 
-  const hmac = crypto.createHmac("sha256", secretKey)
-    .update(stringToSign)
+  const hmacSignature = crypto
+    .createHmac("sha256", secretKey)
+    .update(componentSignature, "utf-8")
     .digest("base64");
 
-  return `HMACSHA256=${hmac}`;
+  return `HMACSHA256=${hmacSignature}`;
 }
 
 /**
- * Generate timestamp dalam format ISO8601 UTC
- * Format: YYYY-MM-DDTHH:mm:ssZ
- * Contoh: 2020-08-11T08:45:42Z
+ * Generate timestamp ISO8601 UTC
  */
 function getTimestamp() {
   return new Date().toISOString().split('.')[0] + 'Z';
+}
+
+/**
+ * Determine correct endpoint based on base URL
+ */
+function getEndpoint(baseUrl) {
+  if (baseUrl.includes('api-sandbox.doku.com') || baseUrl.includes('api.doku.com')) {
+    return '/checkout/v1/payment';
+  } else {
+    return '/suite/checkout/v1/payment';
+  }
 }
 
 // ===== MAIN HANDLER =====
@@ -55,31 +66,41 @@ module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
   if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method !== "POST")
-    return res.status(405).json({ success: false, error: "Method Not Allowed" });
+  if (req.method !== "POST") {
+    return res.status(405).json({ 
+      success: false, 
+      error: "Method Not Allowed" 
+    });
+  }
 
   try {
+    console.log("\n=== DOKU PAYMENT REQUEST START ===");
+    
     // ===== Validate Environment Variables =====
-    if (!process.env.DOKU_CLIENT_ID || !process.env.DOKU_SECRET_KEY) {
-      throw new Error("DOKU_CLIENT_ID and DOKU_SECRET_KEY must be configured");
+    const clientId = process.env.DOKU_CLIENT_ID;
+    const secretKey = process.env.DOKU_SECRET_KEY;
+
+    if (!clientId || !secretKey) {
+      throw new Error("DOKU_CLIENT_ID and DOKU_SECRET_KEY must be set");
     }
 
-    // ===== Extract Request Data =====
+    console.log("Environment:", DOKU_BASE_URL);
+    console.log("Client ID:", clientId);
+
+    // ===== Extract & Validate Request Data =====
     const {
       gross_amount,
       item_details,
       customer_details
     } = req.body;
 
-    // Validasi basic
     if (!gross_amount || !item_details || !customer_details) {
       return res.status(400).json({
         success: false,
-        error: "Missing required fields: gross_amount, item_details, customer_details"
+        error: "Missing required fields"
       });
     }
 
-    // Validasi customer details
     if (!customer_details.email) {
       return res.status(400).json({
         success: false,
@@ -94,8 +115,9 @@ module.exports = async (req, res) => {
       });
     }
 
-    // ===== Generate Unique Invoice Number =====
-    const invoiceNumber = `RM-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    // ===== Generate Invoice =====
+    const invoiceNumber = `RM-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+    console.log("Invoice:", invoiceNumber);
 
     // ===== Prepare Line Items =====
     const lineItems = item_details.map((item, index) => ({
@@ -110,27 +132,21 @@ module.exports = async (req, res) => {
       type: item.type || "PRODUCT"
     }));
 
-    // ===== Construct DOKU Request Payload =====
-    // Sesuai dokumentasi: https://dashboard.doku.com/docs/docs/jokul-checkout/jokul-checkout-integration/
+    // ===== Construct Payload =====
     const payload = {
       order: {
         amount: Math.round(Number(gross_amount)),
         invoice_number: invoiceNumber,
         currency: "IDR",
-        
-        // PENTING: Gunakan callback_url dan callback_url_cancel (BUKAN success_redirect_url)
         callback_url: `${FRONTEND_URL}/payment/success`,
         callback_url_cancel: `${FRONTEND_URL}/payment/cancel`,
-        
         language: "ID",
         auto_redirect: true,
         line_items: lineItems
       },
-
       payment: {
-        payment_due_date: 60 // dalam menit
+        payment_due_date: 60
       },
-
       customer: {
         id: customer_details.customer_id || `CUST-${Date.now()}`,
         name: customer_details.first_name || customer_details.name,
@@ -143,96 +159,94 @@ module.exports = async (req, res) => {
       }
     };
 
-    // ===== Generate Request Headers =====
+    // ===== Generate Headers =====
     const requestId = crypto.randomUUID();
     const timestamp = getTimestamp();
-    const target = "/checkout/v1/payment";
+    const target = getEndpoint(DOKU_BASE_URL);
     const digest = generateDigest(payload);
+    const signature = generateSignature(clientId, requestId, timestamp, target, digest, secretKey);
 
-    const signature = generateSignature(
-      process.env.DOKU_CLIENT_ID,
-      requestId,
-      timestamp,
-      target,
-      digest,
-      process.env.DOKU_SECRET_KEY
-    );
-
-    // PENTING: Sesuai dokumentasi DOKU, header Digest TIDAK dikirim
-    // Digest hanya digunakan dalam pembuatan Signature
     const headers = {
       "Content-Type": "application/json",
-      "Client-Id": process.env.DOKU_CLIENT_ID,
+      "Client-Id": clientId,
       "Request-Id": requestId,
       "Request-Timestamp": timestamp,
       "Signature": signature
     };
 
-    console.log("=== DOKU API REQUEST ===");
-    console.log("URL:", `${DOKU_BASE_URL}${target}`);
-    console.log("Headers:", JSON.stringify(headers, null, 2));
-    console.log("Payload:", JSON.stringify(payload, null, 2));
-
     // ===== Call DOKU API =====
-    const response = await fetch(`${DOKU_BASE_URL}${target}`, {
+    const apiUrl = `${DOKU_BASE_URL}${target}`;
+    console.log("API URL:", apiUrl);
+    console.log("Headers:", JSON.stringify(headers, null, 2));
+
+    const response = await fetch(apiUrl, {
       method: "POST",
-      headers,
+      headers: headers,
       body: JSON.stringify(payload)
     });
 
-    const data = await response.json();
-
-    console.log("=== DOKU API RESPONSE ===");
+    const responseText = await response.text();
     console.log("Status:", response.status);
-    console.log("Response:", JSON.stringify(data, null, 2));
+    console.log("Response:", responseText);
 
-    // ===== Handle Error Response =====
+    // Parse response
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error("Parse error:", parseError);
+      return res.status(500).json({
+        success: false,
+        error: "Invalid response from DOKU",
+        details: responseText
+      });
+    }
+
+    // ===== Handle Error =====
     if (!response.ok) {
+      console.error("DOKU API Error");
       return res.status(response.status).json({
         success: false,
         error: data.error?.message || data.message || "DOKU API error",
-        details: data
+        errorDetails: data
       });
     }
 
     // ===== Validate Response =====
     if (!data.response?.payment?.url) {
+      console.error("No payment URL");
       return res.status(500).json({
         success: false,
-        error: "Invalid response from DOKU - no payment URL received",
-        details: data
+        error: "Invalid response - no payment URL",
+        response: data
       });
     }
 
-    // ===== Return Success Response =====
-    // Response structure sesuai dokumentasi DOKU
+    console.log("✅ Success");
+    console.log("Checkout URL:", data.response.payment.url);
+
+    // ===== Return Success =====
     return res.status(200).json({
       success: true,
-      message: data.message, // ["SUCCESS"]
+      message: data.message,
       orderId: invoiceNumber,
-      
-      // Payment URL untuk redirect customer
       checkoutUrl: data.response.payment.url,
-      redirectUrl: data.response.payment.url, // Alias
-      
-      // Token dan expiry info
+      redirectUrl: data.response.payment.url,
       tokenId: data.response.payment.token_id,
-      expiredDate: data.response.payment.expired_date, // Format: yyyyMMddHHmmss (contoh: 20230302192904)
-      
-      // Additional info
+      expiredDate: data.response.payment.expired_date,
       sessionId: data.response.order?.session_id,
       uuid: data.response.uuid,
-      
-      // Full response untuk debugging
       dokuResponse: data.response
     });
 
   } catch (err) {
-    console.error("=== ERROR ===", err);
+    console.error("Exception:", err.message);
     return res.status(500).json({
       success: false,
       error: err.message,
       stack: process.env.NODE_ENV === "development" ? err.stack : undefined
     });
+  } finally {
+    console.log("=== END ===\n");
   }
 };
