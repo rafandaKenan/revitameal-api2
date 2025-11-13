@@ -161,8 +161,8 @@ module.exports = async (req, res) => {
         amount: Number(gross_amount),
         invoice_number: uniqueOrderId,
         currency: 'IDR',
-        callback_url: `${process.env.NEXT_PUBLIC_BASE_URL || 'https://yourdomain.com'}/payment/success`,
-        callback_url_cancel: `${process.env.NEXT_PUBLIC_BASE_URL || 'https://yourdomain.com'}/payment/cancel`,
+        callback_url: `${process.env.NEXT_PUBLIC_BASE_URL || 'https://revitameal-82d2e.web.app'}/payment/success`,
+        callback_url_cancel: `${process.env.NEXT_PUBLIC_BASE_URL || 'https://revitameal-82d2e.web.app'}/payment/cancel`,
         language: 'ID',
         auto_redirect: true, // Auto redirect ke callback_url setelah pembayaran
         line_items: lineItems
