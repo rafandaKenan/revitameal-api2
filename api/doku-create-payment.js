@@ -8,14 +8,21 @@ const DOKU_BASE_URL = "https://api-sandbox.doku.com";
 
 // ===== HELPER FUNCTIONS =====
 
-// Generate Digest header → "SHA-256=<base64>"
+/**
+ * Generate Digest dari request body
+ * Digest = Base64(SHA256(JSON body))
+ * NOTE: HANYA base64 string, TANPA prefix "SHA-256="
+ */
 function generateDigest(body) {
   const json = JSON.stringify(body);
-  const hash = crypto.createHash("sha256").update(json, "utf-8").digest("base64");
-  return `SHA-256=${hash}`;
+  const hash = crypto.createHash("sha256").update(json, "utf-8").digest();
+  return Buffer.from(hash).toString("base64");
 }
 
-// Generate DOKU signature
+/**
+ * Generate DOKU signature
+ * Format: HMACSHA256=<base64_encoded_signature>
+ */
 function generateSignature(clientId, requestId, timestamp, target, digest, secretKey) {
   const stringToSign =
     `Client-Id:${clientId}\n` +
@@ -31,9 +38,12 @@ function generateSignature(clientId, requestId, timestamp, target, digest, secre
   return `HMACSHA256=${hmac}`;
 }
 
-// Clean timestamp → remove milliseconds
+/**
+ * Generate timestamp dalam format ISO8601 UTC
+ * Format: YYYY-MM-DDTHH:mm:ssZ
+ */
 function getTimestamp() {
-  return new Date().toISOString().replace(/\.\d{3}/, "");
+  return new Date().toISOString().split('.')[0] + 'Z';
 }
 
 // ===== MAIN HANDLER =====
@@ -63,33 +73,47 @@ module.exports = async (req, res) => {
       });
     }
 
+    // Validasi customer details
+    if (!customer_details.first_name && !customer_details.name) {
+      return res.status(400).json({
+        success: false,
+        error: "Customer name is required"
+      });
+    }
+
+    if (!customer_details.email) {
+      return res.status(400).json({
+        success: false,
+        error: "Customer email is required"
+      });
+    }
+
     // ===== Create unique invoice =====
     const invoiceNumber = `RM-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
     // === Prepare line_items ===
-    const lineItems = item_details.map((item) => ({
-      id: item.id || item.sku,
+    const lineItems = item_details.map((item, index) => ({
+      id: item.id || item.sku || `ITEM-${index + 1}`,
       name: item.name,
-      price: Math.round(item.price),
-      quantity: item.quantity,
-      sku: item.sku || item.id,
+      price: Math.round(Number(item.price)),
+      quantity: Number(item.quantity),
+      sku: item.sku || item.id || `SKU-${index + 1}`,
       category: item.category || "food",
+      url: item.url || FRONTEND_URL,
+      image_url: item.image_url || "",
       type: "PRODUCT"
     }));
 
     // ===== DOKU Payload =====
     const payload = {
       order: {
-        amount: Math.round(gross_amount),
+        amount: Math.round(Number(gross_amount)),
         invoice_number: invoiceNumber,
         currency: "IDR",
 
-        // Webhook
-        callback_url: CALLBACK_URL,
-
-        // Redirects
-        success_redirect_url: `${FRONTEND_URL}/payment/success`,
-        failed_redirect_url: `${FRONTEND_URL}/payment/cancel`,
+        // URL untuk redirect setelah pembayaran
+        callback_url: `${FRONTEND_URL}/payment/success`,
+        callback_url_cancel: `${FRONTEND_URL}/payment/cancel`,
 
         language: "ID",
         auto_redirect: true,
@@ -97,7 +121,7 @@ module.exports = async (req, res) => {
       },
 
       payment: {
-        payment_due_date: 60
+        payment_due_date: 60 // dalam menit
       },
 
       customer: {
@@ -132,11 +156,14 @@ module.exports = async (req, res) => {
       "Client-Id": process.env.DOKU_CLIENT_ID,
       "Request-Id": requestId,
       "Request-Timestamp": timestamp,
-      "Digest": digest,
       "Signature": signature
+      // NOTE: Digest TIDAK dimasukkan sebagai header terpisah
+      // Digest sudah digunakan dalam pembuatan Signature
     };
 
-    console.log("=== DOKU REQUEST HEADERS ===", headers);
+    console.log("=== DOKU REQUEST ===");
+    console.log("Headers:", JSON.stringify(headers, null, 2));
+    console.log("Payload:", JSON.stringify(payload, null, 2));
 
     // ===== Call DOKU API =====
     const response = await fetch(`${DOKU_BASE_URL}${target}`, {
@@ -147,12 +174,14 @@ module.exports = async (req, res) => {
 
     const data = await response.json();
 
-    console.log("=== DOKU RESPONSE ===", data);
+    console.log("=== DOKU RESPONSE ===");
+    console.log("Status:", response.status);
+    console.log("Data:", JSON.stringify(data, null, 2));
 
     if (!response.ok) {
       return res.status(response.status).json({
         success: false,
-        error: data.error?.message || "DOKU API error",
+        error: data.error?.message || data.message || "DOKU API error",
         details: data
       });
     }
@@ -160,7 +189,7 @@ module.exports = async (req, res) => {
     if (!data.response?.payment?.url) {
       return res.status(500).json({
         success: false,
-        error: "Invalid response from DOKU",
+        error: "Invalid response from DOKU - no payment URL",
         details: data
       });
     }
@@ -169,15 +198,19 @@ module.exports = async (req, res) => {
       success: true,
       orderId: invoiceNumber,
       checkoutUrl: data.response.payment.url,
+      redirectUrl: data.response.payment.url, // Alias untuk backward compatibility
       tokenId: data.response.payment.token_id,
-      expiredDatetime: data.response.payment.expired_datetime
+      expiredDate: data.response.payment.expired_date,
+      expiredDatetime: data.response.payment.expired_datetime,
+      dokuResponse: data.response
     });
 
   } catch (err) {
     console.error("=== ERROR ===", err);
     return res.status(500).json({
       success: false,
-      error: err.message
+      error: err.message,
+      stack: process.env.NODE_ENV === "development" ? err.stack : undefined
     });
   }
 };
