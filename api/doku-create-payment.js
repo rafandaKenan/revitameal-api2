@@ -1,13 +1,8 @@
 // api/doku-create-payment.js
 const crypto = require("crypto");
 
-// === CONSTANTS ===
 const FRONTEND_URL = "https://revitameal-82d2e.web.app";
-
-// ✅ PERBAIKAN: Base URL harus menggunakan api-sandbox atau api.doku.com
 const DOKU_BASE_URL = process.env.DOKU_BASE_URL || "https://api-sandbox.doku.com";
-
-// ===== HELPER FUNCTIONS =====
 
 function generateDigest(body) {
   const jsonString = JSON.stringify(body);
@@ -35,12 +30,9 @@ function getTimestamp() {
   return new Date().toISOString().split('.')[0] + 'Z';
 }
 
-// ✅ PERBAIKAN: Endpoint selalu sama untuk semua environment
 function getEndpoint() {
   return '/checkout/v1/payment';
 }
-
-// ===== MAIN HANDLER =====
 
 module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -68,11 +60,21 @@ module.exports = async (req, res) => {
     console.log("Environment:", DOKU_BASE_URL);
     console.log("Client ID:", clientId);
 
+    // ✅ PERBAIKAN: Terima order_id dari frontend
     const {
+      order_id, // ✅ NEW: Receive from frontend
       gross_amount,
       item_details,
       customer_details
     } = req.body;
+
+    // ✅ PERBAIKAN: Validasi order_id
+    if (!order_id) {
+      return res.status(400).json({
+        success: false,
+        error: "order_id is required from frontend"
+      });
+    }
 
     if (!gross_amount || !item_details || !customer_details) {
       return res.status(400).json({
@@ -88,7 +90,6 @@ module.exports = async (req, res) => {
       });
     }
 
-    // ✅ PERBAIKAN: Cek name atau first_name
     if (!customer_details.name && !customer_details.first_name) {
       return res.status(400).json({
         success: false,
@@ -96,8 +97,9 @@ module.exports = async (req, res) => {
       });
     }
 
-    const invoiceNumber = `RM-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
-    console.log("Invoice:", invoiceNumber);
+    // ✅ PERBAIKAN: Use order_id from frontend (DON'T generate new)
+    const invoiceNumber = order_id;
+    console.log("✅ Using order_id from frontend:", invoiceNumber);
 
     const lineItems = item_details.map((item, index) => ({
       id: item.id || item.sku || `ITEM-${index + 1}`,
@@ -105,17 +107,16 @@ module.exports = async (req, res) => {
       price: Math.round(Number(item.price)),
       quantity: Number(item.quantity),
       sku: item.sku || item.id || `SKU-${index + 1}`,
-      category: item.category || "food-and-beverage",  // ✅ Sesuai list kategori
+      category: item.category || "food-and-beverage",
       url: item.url || FRONTEND_URL,
       image_url: item.image_url || "",
       type: item.type || "PRODUCT"
     }));
 
-    // ✅ PERBAIKAN: Payload sesuai dokumentasi
     const payload = {
       order: {
         amount: Math.round(Number(gross_amount)),
-        invoice_number: invoiceNumber,
+        invoice_number: invoiceNumber, // ✅ Use from frontend
         currency: "IDR",
         callback_url: `${FRONTEND_URL}/payment/success?order_id=${invoiceNumber}`,
         callback_url_cancel: `${FRONTEND_URL}/payment/cancel?order_id=${invoiceNumber}`,
@@ -129,21 +130,21 @@ module.exports = async (req, res) => {
       },
       customer: {
         id: customer_details.customer_id || `CUST-${Date.now()}`,
-        name: customer_details.name || customer_details.first_name,  // ✅ Perbaikan urutan
+        name: customer_details.name || customer_details.first_name,
         last_name: customer_details.last_name || "",
         email: customer_details.email,
         phone: customer_details.phone || "",
         address: customer_details.address || "",
         city: customer_details.city || "",
-        postcode: customer_details.postal_code || customer_details.postcode || "",  // ✅ Tambahan
-        state: customer_details.state || "",  // ✅ Tambahan
+        postcode: customer_details.postal_code || customer_details.postcode || "",
+        state: customer_details.state || "",
         country: "ID"
       }
     };
 
     const requestId = crypto.randomUUID();
     const timestamp = getTimestamp();
-    const target = getEndpoint();  // ✅ Perbaikan: tidak perlu parameter
+    const target = getEndpoint();
     const digest = generateDigest(payload);
     const signature = generateSignature(clientId, requestId, timestamp, target, digest, secretKey);
 
@@ -157,7 +158,6 @@ module.exports = async (req, res) => {
 
     const apiUrl = `${DOKU_BASE_URL}${target}`;
     console.log("API URL:", apiUrl);
-    console.log("Headers:", JSON.stringify(headers, null, 2));
 
     const response = await fetch(apiUrl, {
       method: "POST",
@@ -167,7 +167,6 @@ module.exports = async (req, res) => {
 
     const responseText = await response.text();
     console.log("Status:", response.status);
-    console.log("Response:", responseText);
 
     let data;
     try {
@@ -185,7 +184,7 @@ module.exports = async (req, res) => {
       console.error("DOKU API Error");
       return res.status(response.status).json({
         success: false,
-        error: data.error?.message || data.message || data.error_messages?.join(', ') || "DOKU API error",  // ✅ Tambahan error_messages
+        error: data.error?.message || data.message || data.error_messages?.join(', ') || "DOKU API error",
         errorDetails: data
       });
     }
@@ -199,14 +198,13 @@ module.exports = async (req, res) => {
       });
     }
 
-    console.log("✅ Success");
+    console.log("✅ Success - Order ID:", invoiceNumber);
     console.log("Checkout URL:", data.response.payment.url);
-    console.log("Expired Date:", data.response.payment.expired_date);  // ✅ Tambahan log
 
     return res.status(200).json({
       success: true,
       message: data.message,
-      orderId: invoiceNumber,
+      orderId: invoiceNumber, // ✅ Return same order_id
       checkoutUrl: data.response.payment.url,
       redirectUrl: data.response.payment.url,
       tokenId: data.response.payment.token_id,
