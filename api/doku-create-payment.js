@@ -1,4 +1,4 @@
-// api/doku-create-payment.js
+// api/doku-create-payment.js v1
 const crypto = require("crypto");
 
 const FRONTEND_URL = "https://revitameal-82d2e.web.app";
@@ -17,6 +17,7 @@ function generateSignature(clientId, requestId, timestamp, target, digest, secre
     `Request-Timestamp:${timestamp}\n` +
     `Request-Target:${target}\n` +
     `Digest:${digest}`;
+  
 
   const hmacSignature = crypto
     .createHmac("sha256", secretKey)
