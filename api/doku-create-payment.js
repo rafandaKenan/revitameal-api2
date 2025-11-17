@@ -117,9 +117,9 @@ module.exports = async (req, res) => {
         amount: Math.round(Number(gross_amount)),
         invoice_number: invoiceNumber,
         currency: "IDR",
-        callback_url: `${FRONTEND_URL}/payment/success`,
-        callback_url_cancel: `${FRONTEND_URL}/payment/cancel`,
-        callback_url_result: `${FRONTEND_URL}/payment/result`,  // ✅ Tambahan
+        callback_url: `${FRONTEND_URL}/payment/success?order_id=${invoiceNumber}`,
+        callback_url_cancel: `${FRONTEND_URL}/payment/cancel?order_id=${invoiceNumber}`,
+        callback_url_result: `${FRONTEND_URL}/payment/result?order_id=${invoiceNumber}`,
         language: "ID",
         auto_redirect: true,
         line_items: lineItems
