@@ -1,4 +1,4 @@
-// api/doku-create-payment.js v1
+// api/doku-create-payment.js
 const crypto = require("crypto");
 
 const FRONTEND_URL = "https://revitameal-82d2e.web.app";
