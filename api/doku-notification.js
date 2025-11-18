@@ -19,21 +19,7 @@ if (!admin.apps.length) {
 
 const db = admin.firestore();
 
-// ======== Helper Functions ======== //
-
-/**
- * Hitung signature untuk verifikasi dari DOKU
- */
-function generateSignature(clientSecret, requestId, requestTimestamp, requestTarget, body) {
-  const digest = crypto.createHash('sha256').update(JSON.stringify(body)).digest('base64');
-  const signatureBase = `Client-Id:${process.env.DOKU_CLIENT_ID}\nRequest-Id:${requestId}\nRequest-Timestamp:${requestTimestamp}\nRequest-Target:${requestTarget}\nDigest:${digest}`;
-  const hmac = crypto.createHmac('sha256', clientSecret).update(signatureBase).digest('base64');
-  return `HMACSHA256=${hmac}`;
-}
-
-/**
- * Simpan log notifikasi ke Firestore
- */
+// ✅ Simpan log notifikasi ke Firestore
 async function saveNotificationLog(orderId, data) {
   try {
     console.log(`📦 [LOG] Saving notification log for Order ID ${orderId}`);
@@ -51,12 +37,10 @@ async function saveNotificationLog(orderId, data) {
   }
 }
 
-/**
- * Update status pesanan di Firestore
- */
-async function updateOrderStatus(orderId, status) {
+// ✅ Update order status di Firestore
+async function updateOrderStatus(orderId, paymentStatus, transactionData) {
   try {
-    console.log(`🔄 [DB] Updating order ${orderId} status → ${status}`);
+    console.log(`🔄 [DB] Updating order ${orderId} status → ${paymentStatus}`);
     
     // Query order by dokuOrderId
     const ordersRef = db.collection('orders');
@@ -73,18 +57,19 @@ async function updateOrderStatus(orderId, status) {
     // Map DOKU status ke internal status
     let newStatus = 'pending_payment';
     
-    if (status === 'SUCCESS' || status === 'PAID' || status === 'SETTLEMENT') {
+    if (paymentStatus === 'SUCCESS' || paymentStatus === 'PAID' || paymentStatus === 'SETTLEMENT') {
       newStatus = 'paid';
-    } else if (status === 'FAILED' || status === 'EXPIRED' || status === 'CANCELLED') {
+    } else if (paymentStatus === 'FAILED' || paymentStatus === 'EXPIRED' || paymentStatus === 'CANCELLED') {
       newStatus = 'cancelled';
-    } else if (status === 'PENDING') {
+    } else if (paymentStatus === 'PENDING') {
       newStatus = 'pending_payment';
     }
 
     // Update Firestore
     await orderDoc.ref.update({
       status: newStatus,
-      dokuPaymentStatus: status,
+      dokuPaymentStatus: paymentStatus,
+      dokuTransactionId: transactionData?.id || null,
       webhookReceivedAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       ...(newStatus === 'paid' ? { 
@@ -101,106 +86,177 @@ async function updateOrderStatus(orderId, status) {
   }
 }
 
-/**
- * Kirim email / webhook setelah pembayaran sukses
- */
+// ✅ (Optional) Kirim email sukses
 async function sendPaymentSuccessEmail(orderId, email) {
   try {
-    console.log(`📧 [EMAIL] Payment success for ${orderId} — sending email to ${email}`);
-    // TODO: Integrasikan ke mail service
-    // await sendEmail({ to: email, subject: "Payment Success", orderId });
+    console.log(`📧 [EMAIL] Payment success for ${orderId} — email: ${email}`);
+    // TODO: Integrate dengan email service (SendGrid, Nodemailer, etc)
   } catch (error) {
     console.error('❌ Error sending email:', error);
   }
 }
 
-// ======== Main Handler ======== //
+// ✅ Generate signature sesuai dokumentasi DOKU
+function generateSignature(clientId, clientSecret, requestId, requestTimestamp, requestTarget, body) {
+  // 1. Generate Digest dari body
+  const digest = crypto.createHash('sha256').update(JSON.stringify(body)).digest('base64');
+  
+  // 2. Buat signature base (HARUS SESUAI URUTAN INI!)
+  const signatureBase = `Client-Id:${clientId}\nRequest-Id:${requestId}\nRequest-Timestamp:${requestTimestamp}\nRequest-Target:${requestTarget}\nDigest:${digest}`;
+  
+  console.log('🔐 [SIGNATURE DEBUG]');
+  console.log('Signature Base:', signatureBase);
+  console.log('Digest:', digest);
+  
+  // 3. Generate HMAC SHA256
+  const hmac = crypto.createHmac('sha256', clientSecret).update(signatureBase).digest('base64');
+  
+  // 4. Return dengan format HMACSHA256=
+  return `HMACSHA256=${hmac}`;
+}
+
 export default async function handler(req, res) {
-  // --- Hanya terima POST ---
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  // --- Safe Logging: nonaktifkan di production ---
   const log = process.env.NODE_ENV !== 'production' ? console.log : () => {};
 
   try {
     const body = req.body;
     const headers = req.headers;
     
-    log('📨 DOKU Notification Received:', JSON.stringify(body, null, 2));
-    log('📋 Headers:', JSON.stringify(headers, null, 2));
+    log('📨 DOKU Notification Received');
+    log('📋 Body:', JSON.stringify(body, null, 2));
 
-    // --- Ambil header penting (PAKAI FORMAT LAMA dengan x- prefix) ---
+    // ✅ Extract headers dengan berbagai format
+    const clientId = headers['client-id'] || headers['Client-Id'];
     const requestId = headers['request-id'] || headers['Request-Id'];
     const requestTimestamp = headers['request-timestamp'] || headers['Request-Timestamp'];
     const signature = headers['signature'] || headers['Signature'] || '';
     
-    // ✅ PENTING: Path harus EXACT MATCH dengan URL di DOKU Dashboard
-    // Kalau URL di dashboard: https://revitameal-api2.vercel.app/api/doku-notification
-    // Maka requestTarget = '/api/doku-notification'
+    // ⚠️ CRITICAL: Request-Target HARUS EXACT MATCH dengan URL di DOKU Dashboard
+    // Contoh: 
+    // - Jika URL di dashboard: https://yourdomain.com/api/doku-notification
+    // - Maka requestTarget = '/api/doku-notification' (dengan leading slash, tanpa trailing slash)
     const requestTarget = '/api/doku-notification';
 
-    log('🔍 Extracted Headers:', {
-      requestId,
-      requestTimestamp,
-      hasSignature: !!signature
+    console.log('🔍 Extracted Headers:', { 
+      clientId: clientId ? `${clientId.substring(0, 10)}...` : 'MISSING',
+      requestId, 
+      requestTimestamp, 
+      hasSignature: !!signature,
+      requestTarget
     });
 
-    if (!requestId || !requestTimestamp || !signature) {
-      console.error('❌ Missing required headers');
-      return res.status(400).json({ error: 'Missing required headers' });
+    // ✅ Validasi environment variables
+    if (!process.env.DOKU_CLIENT_ID || !process.env.DOKU_CLIENT_SECRET) {
+      console.error('❌ DOKU credentials not configured');
+      return res.status(500).json({ 
+        error: 'Server configuration error',
+        details: 'DOKU credentials missing'
+      });
     }
 
-    // --- Verifikasi signature ---
-    const expectedSignature = generateSignature(
-      process.env.DOKU_SECRET_KEY,
-      requestId,
-      requestTimestamp,
-      requestTarget,
-      body
-    );
+    // ⚠️ TEMPORARY: Skip signature validation untuk debugging
+    const SKIP_SIGNATURE = process.env.SKIP_SIGNATURE_VALIDATION === 'true';
 
-    if (signature !== expectedSignature) {
-      console.error('❌ Invalid Signature!');
-      console.error('Expected:', expectedSignature);
-      console.error('Received:', signature);
-      return res.status(401).json({ error: 'Invalid Signature' });
+    if (!SKIP_SIGNATURE) {
+      // Cek headers required
+      if (!clientId || !requestId || !requestTimestamp || !signature) {
+        console.error('❌ Missing headers:', { 
+          clientId: !!clientId,
+          requestId: !!requestId,
+          requestTimestamp: !!requestTimestamp,
+          signature: !!signature
+        });
+        return res.status(400).json({ 
+          error: 'Missing required headers',
+          required: ['Client-Id', 'Request-Id', 'Request-Timestamp', 'Signature']
+        });
+      }
+
+      // Generate expected signature
+      const expectedSignature = generateSignature(
+        process.env.DOKU_CLIENT_ID,
+        process.env.DOKU_SECRET_KEY,
+        requestId,
+        requestTimestamp,
+        requestTarget,
+        body
+      );
+
+      console.log('🔐 Signature Comparison:');
+      console.log('Expected:', expectedSignature);
+      console.log('Received:', signature);
+      console.log('Match:', signature === expectedSignature);
+
+      // Verify signature
+      if (signature !== expectedSignature) {
+        console.error('❌ Invalid Signature!');
+        console.error('Expected:', expectedSignature);
+        console.error('Received:', signature);
+        
+        // Debug info
+        console.error('Debug Info:', {
+          clientIdMatch: clientId === process.env.DOKU_CLIENT_ID,
+          requestTarget,
+          bodyLength: JSON.stringify(body).length
+        });
+        
+        return res.status(401).json({ 
+          error: 'Invalid Signature',
+          hint: 'Check Request-Target path and ensure it matches DOKU Dashboard configuration'
+        });
+      }
+
+      console.log('✅ Signature validated successfully');
+    } else {
+      console.log('⚠️ SIGNATURE VALIDATION SKIPPED (DEBUG MODE)');
     }
 
-    // --- Proses notifikasi ---
+    // Extract data dari webhook
     const orderId = body.order?.invoice_number || body.order_id || 'UNKNOWN';
-    const status = body.transaction?.status?.toUpperCase() || 'UNKNOWN';
+    const paymentStatus = body.transaction?.status?.toUpperCase() || 'UNKNOWN';
+    const transactionData = body.transaction || {};
     const email = body.customer?.email || 'no-email';
 
-    log(`✅ Notification verified for Order ID ${orderId} → Status: ${status}`);
+    log(`✅ Notification verified for Order ID ${orderId} → Status: ${paymentStatus}`);
 
-    // --- Simpan log & update DB ---
+    // ✅ Save log ke Firestore
     await saveNotificationLog(orderId, body);
+    
+    // ✅ Update order status
+    const updated = await updateOrderStatus(orderId, paymentStatus, transactionData);
 
-    if (status === 'SUCCESS') {
-      await updateOrderStatus(orderId, 'SUCCESS');
-      await sendPaymentSuccessEmail(orderId, email);
-    } else if (['FAILED', 'EXPIRED', 'CANCELLED'].includes(status)) {
-      await updateOrderStatus(orderId, 'FAILED');
-    } else if (status === 'PENDING') {
-      await updateOrderStatus(orderId, 'PENDING');
-    } else {
-      log(`⚠️ Unrecognized status: ${status}`);
+    if (!updated) {
+      // Order tidak ditemukan, tapi tetap return 200 agar DOKU tidak retry
+      console.warn(`⚠️ Order ${orderId} not found, but returning 200 to prevent retries`);
+      return res.status(200).json({ 
+        message: 'Notification received but order not found',
+        orderId,
+        status: paymentStatus
+      });
     }
 
-    // --- Balasan ke DOKU ---
+    // ✅ Kirim email jika sukses
+    if (paymentStatus === 'SUCCESS') {
+      await sendPaymentSuccessEmail(orderId, email);
+    }
+
     return res.status(200).json({ 
       message: 'Notification processed successfully',
       orderId,
-      status
+      status: paymentStatus
     });
 
   } catch (error) {
     console.error('💥 Error processing DOKU notification:', error);
-    return res.status(500).json({ 
-      error: 'Internal Server Error', 
-      details: error.message 
+    
+    // Return 200 even on error to prevent DOKU retries for non-recoverable errors
+    return res.status(200).json({ 
+      message: 'Notification received with errors',
+      error: error.message 
     });
   }
 }
