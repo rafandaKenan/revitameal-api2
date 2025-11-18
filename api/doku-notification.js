@@ -136,6 +136,9 @@ export default async function handler(req, res) {
     const requestTimestamp = headers['x-request-timestamp'];
     const signature = headers['x-signature'] || '';
     
+    // ✅ PENTING: Path harus EXACT MATCH dengan URL di DOKU Dashboard
+    // Kalau URL di dashboard: https://revitameal-api2.vercel.app/api/doku-notification
+    // Maka requestTarget = '/api/doku-notification'
     const requestTarget = '/api/doku-notification';
 
     log('🔍 Extracted Headers:', {
