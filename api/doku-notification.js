@@ -122,7 +122,7 @@ export default async function handler(req, res) {
     const requestId = headers['request-id'] || headers['Request-Id'];
     const requestTimestamp = headers['request-timestamp'] || headers['Request-Timestamp'];
     const signature = headers['signature'] || headers['Signature'] || '';
-    const requestTarget = '/api/doku-notification';
+    const requestTarget = '/api/doku/notification';
 
     // Debug: Log semua headers untuk debugging
     console.log('🔍 All Headers:', Object.keys(headers));
