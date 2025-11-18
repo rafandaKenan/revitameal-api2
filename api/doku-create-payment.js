@@ -119,9 +119,9 @@ module.exports = async (req, res) => {
         amount: Math.round(Number(gross_amount)),
         invoice_number: invoiceNumber, // ✅ Use from frontend
         currency: "IDR",
-        callback_url: `${FRONTEND_URL}/payment/result?order_id=${invoiceNumber}&status=success`,
-        callback_url_cancel: `${FRONTEND_URL}/payment/result?order_id=${invoiceNumber}&status=cancelled`,
-        callback_url_result: `${FRONTEND_URL}/payment/result?order_id=${invoiceNumber}`,
+        callback_url: `${FRONTEND_URL}/payment/success?order_id=${invoiceNumber}&from=doku`,
+        callback_url_cancel: `${FRONTEND_URL}/payment/cancel?order_id=${invoiceNumber}&from=doku`,
+        callback_url_result: `${FRONTEND_URL}/payment/result?order_id=${invoiceNumber}&from=doku`,
         language: "ID",
         auto_redirect: true,
         line_items: lineItems
