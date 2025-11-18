@@ -154,7 +154,7 @@ export default async function handler(req, res) {
 
     // --- Verifikasi signature ---
     const expectedSignature = generateSignature(
-      process.env.DOKU_CLIENT_SECRET,
+      process.env.DOKU_SECRET_KEY,
       requestId,
       requestTimestamp,
       requestTarget,
