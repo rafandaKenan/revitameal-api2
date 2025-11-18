@@ -132,9 +132,9 @@ export default async function handler(req, res) {
     log('📋 Headers:', JSON.stringify(headers, null, 2));
 
     // --- Ambil header penting (PAKAI FORMAT LAMA dengan x- prefix) ---
-    const requestId = headers['x-request-id'];
-    const requestTimestamp = headers['x-request-timestamp'];
-    const signature = headers['x-signature'] || '';
+    const requestId = headers['request-id'] || headers['Request-Id'];
+    const requestTimestamp = headers['request-timestamp'] || headers['Request-Timestamp'];
+    const signature = headers['signature'] || headers['Signature'] || '';
     
     // ✅ PENTING: Path harus EXACT MATCH dengan URL di DOKU Dashboard
     // Kalau URL di dashboard: https://revitameal-api2.vercel.app/api/doku-notification
