@@ -118,30 +118,55 @@ export default async function handler(req, res) {
     log('📨 DOKU Notification Received:', JSON.stringify(body, null, 2));
     log('📋 Headers:', JSON.stringify(headers, null, 2));
 
-    const requestId = headers['x-request-id'];
-    const requestTimestamp = headers['x-request-timestamp'];
-    const signature = headers['x-signature'] || '';
+    // ✅ DOKU menggunakan format ini (tanpa prefix x-)
+    const requestId = headers['request-id'] || headers['Request-Id'];
+    const requestTimestamp = headers['request-timestamp'] || headers['Request-Timestamp'];
+    const signature = headers['signature'] || headers['Signature'] || '';
     const requestTarget = '/api/doku-notification';
 
-    if (!requestId || !requestTimestamp || !signature) {
-      console.error('❌ Missing headers:', { requestId, requestTimestamp, signature: !!signature });
-      return res.status(400).json({ error: 'Missing required headers' });
-    }
+    // Debug: Log semua headers untuk debugging
+    console.log('🔍 All Headers:', Object.keys(headers));
+    console.log('📋 Raw Headers:', JSON.stringify(headers, null, 2));
+    console.log('📋 Extracted:', { 
+      requestId, 
+      requestTimestamp, 
+      signature: signature ? 'EXISTS' : 'MISSING' 
+    });
 
-    // Verify signature
-    const expectedSignature = generateSignature(
-      process.env.DOKU_CLIENT_SECRET,
-      requestId,
-      requestTimestamp,
-      requestTarget,
-      body
-    );
+    // ⚠️ TEMPORARY: Skip signature validation untuk debugging
+    const SKIP_SIGNATURE = process.env.SKIP_SIGNATURE_VALIDATION === 'true';
 
-    if (signature !== expectedSignature) {
-      console.error('❌ Invalid Signature!');
-      console.error('Expected:', expectedSignature);
-      console.error('Received:', signature);
-      return res.status(401).json({ error: 'Invalid Signature' });
+    if (!SKIP_SIGNATURE) {
+      if (!requestId || !requestTimestamp || !signature) {
+        console.error('❌ Missing headers:', { 
+          requestId, 
+          requestTimestamp, 
+          signature: !!signature,
+          availableHeaders: Object.keys(headers)
+        });
+        return res.status(400).json({ 
+          error: 'Missing required headers',
+          availableHeaders: Object.keys(headers)
+        });
+      }
+
+      // Verify signature
+      const expectedSignature = generateSignature(
+        process.env.DOKU_CLIENT_SECRET,
+        requestId,
+        requestTimestamp,
+        requestTarget,
+        body
+      );
+
+      if (signature !== expectedSignature) {
+        console.error('❌ Invalid Signature!');
+        console.error('Expected:', expectedSignature);
+        console.error('Received:', signature);
+        return res.status(401).json({ error: 'Invalid Signature' });
+      }
+    } else {
+      console.log('⚠️ SIGNATURE VALIDATION SKIPPED (DEBUG MODE)');
     }
 
     // Extract data dari webhook
