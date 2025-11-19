@@ -1,8 +1,8 @@
 // api/doku-create-payment.js
 const crypto = require("crypto");
 
-const DOKU_BASE_URL = process.env.DOKU_BASE_URL || "https://api-sandbox.doku.com";
-const FRONTEND_URL = process.env.FRONTEND_URL || "https://revitameal-82d2e.web.app";
+const DOKU_BASE_URL = process.env.DOKU_BASE_URL || "https://api.doku.com";
+const FRONTEND_URL = process.env.FRONTEND_URL || "https://revitameal.co.id/";
 
 function generateDigest(body) {
   const jsonString = JSON.stringify(body);
