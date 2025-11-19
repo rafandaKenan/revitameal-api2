@@ -1,6 +1,6 @@
 const crypto = require("crypto");
 
-const DOKU_BASE_URL = process.env.DOKU_BASE_URL || "https://api-sandbox.doku.com";
+const DOKU_BASE_URL = process.env.DOKU_BASE_URL || "https://api.doku.com";
 
 function generateDigest(body) {
   // For GET request, body is empty
