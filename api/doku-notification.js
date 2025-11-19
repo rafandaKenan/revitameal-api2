@@ -190,7 +190,7 @@ export default async function handler(req, res) {
     });
 
     // ✅ Validasi environment variables
-    if (!process.env.DOKU_CLIENT_ID || !process.env.DOKU_CLIENT_SECRET) {
+    if (!process.env.DOKU_CLIENT_ID || !process.env.DOKU_SECRET_KEY) {
       console.error('❌ DOKU credentials not configured');
       return res.status(500).json({ 
         error: 'Server configuration error',
