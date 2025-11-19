@@ -1,8 +1,8 @@
 // api/doku-create-payment.js
 const crypto = require("crypto");
 
-const FRONTEND_URL = "https://revitameal-82d2e.web.app";
 const DOKU_BASE_URL = process.env.DOKU_BASE_URL || "https://api-sandbox.doku.com";
+const FRONTEND_URL = process.env.FRONTEND_URL || "https://revitameal-82d2e.web.app";
 
 function generateDigest(body) {
   const jsonString = JSON.stringify(body);
@@ -18,7 +18,6 @@ function generateSignature(clientId, requestId, timestamp, target, digest, secre
     `Request-Target:${target}\n` +
     `Digest:${digest}`;
   
-
   const hmacSignature = crypto
     .createHmac("sha256", secretKey)
     .update(componentSignature, "utf-8")
@@ -61,15 +60,13 @@ module.exports = async (req, res) => {
     console.log("Environment:", DOKU_BASE_URL);
     console.log("Client ID:", clientId);
 
-    // ✅ PERBAIKAN: Terima order_id dari frontend
     const {
-      order_id, // ✅ NEW: Receive from frontend
+      order_id,
       gross_amount,
       item_details,
       customer_details
     } = req.body;
 
-    // ✅ PERBAIKAN: Validasi order_id
     if (!order_id) {
       return res.status(400).json({
         success: false,
@@ -98,7 +95,6 @@ module.exports = async (req, res) => {
       });
     }
 
-    // ✅ PERBAIKAN: Use order_id from frontend (DON'T generate new)
     const invoiceNumber = order_id;
     console.log("✅ Using order_id from frontend:", invoiceNumber);
 
@@ -117,11 +113,10 @@ module.exports = async (req, res) => {
     const payload = {
       order: {
         amount: Math.round(Number(gross_amount)),
-        invoice_number: invoiceNumber, // ✅ Use from frontend
+        invoice_number: invoiceNumber,
         currency: "IDR",
-        callback_url: `${process.env.FRONTEND_URL}/payment/result?order_id=${invoiceNumber}`,
-        callback_url_cancel: `${process.env.FRONTEND_URL}/payment/cancel?order_id=${invoiceNumber}`,
-        auto_redirect: true,
+        callback_url: `${FRONTEND_URL}/payment/result?order_id=${invoiceNumber}`,
+        callback_url_cancel: `${FRONTEND_URL}/payment/cancel?order_id=${invoiceNumber}`,
         language: "ID",
         auto_redirect: true,
         line_items: lineItems
@@ -205,7 +200,7 @@ module.exports = async (req, res) => {
     return res.status(200).json({
       success: true,
       message: data.message,
-      orderId: invoiceNumber, // ✅ Return same order_id
+      orderId: invoiceNumber,
       checkoutUrl: data.response.payment.url,
       redirectUrl: data.response.payment.url,
       tokenId: data.response.payment.token_id,
